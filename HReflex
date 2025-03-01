@@ -1,0 +1,66 @@
+%% H-Reflex Analysis 
+% This script automates H-reflex preprocessing, peak detection, and response analysis.
+
+clear; clc; close all;
+
+% ---------------------------
+% USER INPUTS
+% ---------------------------
+time = input('Enter "pre" or "post": ', 's');
+if ~ismember(time, {'pre', 'post'})
+    error('Invalid input. Please enter "pre" or "post".');
+end
+
+id = input('Enter subject ID: ', 's');
+
+% Construct file path
+csv_file = sprintf('hreflex/c0%s_%s_hreflex.csv', id, time);
+
+% ---------------------------
+% LOAD & PROCESS DATA
+% ---------------------------
+% Column names: Time, EMG Signal, Stimulation Onset
+data = readtable(csv_file, 'HeaderLines', 1);
+
+timeVec = data{:, 1};  % Time (s)
+emgSignal = data{:, 2};  % EMG response (mV)
+stimOnset = data{:, 3};  % Stimulation markers
+
+% ---------------------------
+% FILTER EMG SIGNAL
+% ---------------------------
+fs = 1000;  % Sampling rate (Hz)
+fc = 20;  % Cutoff frequency (Hz)
+[b, a] = butter(4, fc / (fs / 2), 'low');
+
+filteredEMG = filtfilt(b, a, emgSignal);
+
+% ---------------------------
+% H-REFLEX & M-WAVE DETECTION
+% ---------------------------
+[Hpeak, Hloc] = max(filteredEMG(timeVec > 0.015 & timeVec < 0.04));  % H-Reflex window (15-40 ms)
+[Mpeak, Mloc] = max(filteredEMG(timeVec > 0.005 & timeVec < 0.015)); % M-Wave window (5-15 ms)
+
+% Normalize H/M wave ratios
+HtoM_ratio = Hpeak / Mpeak;
+
+% ---------------------------
+% VISUALIZATION
+% ---------------------------
+figure;
+plot(timeVec, filteredEMG, 'k', 'LineWidth', 1.5);
+hold on;
+plot(timeVec(Hloc), Hpeak, 'ro', 'MarkerSize', 8, 'DisplayName', 'H-Reflex');
+plot(timeVec(Mloc), Mpeak, 'bo', 'MarkerSize', 8, 'DisplayName', 'M-Wave');
+xlabel('Time (s)');
+ylabel('EMG Response (mV)');
+title(['H-Reflex & M-Wave Analysis - Subject ' id]);
+legend;
+grid on;
+
+% ---------------------------
+% SAVE RESULTS
+% ---------------------------
+results = table(id, time, Hpeak, Mpeak, HtoM_ratio);
+writetable(results, 'HReflex_Results.csv');
+disp('H-Reflex analysis completed. Results saved.');
